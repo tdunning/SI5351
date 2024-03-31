@@ -238,6 +238,7 @@ class SI5351:
             base_address: int,
             control_register: int,
             r_register: int,
+            phase_register: int,
         ) -> None:
             self._si5351 = si5351
             self._base = base_address
@@ -245,6 +246,7 @@ class SI5351:
             self._r = r_register
             self._pll = None
             self._divider = None
+            self._phase = phase_register
 
         @property
         def frequency(self) -> float:
@@ -401,6 +403,13 @@ class SI5351:
             self._pll = pll
             self._divider = divider + (numerator / denominator)
 
+        def phase_delay(self, phase: float):
+            assert phase_delay >= 0 and phase_delay <= 1.0, "Invalid phase delay, must be in [0,1]"
+            ph_delay_reg = SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET + self.
+            delay = int(phase * (self._divider))
+            assert delay < 128, "Phase delay too large for selected PLL divisor"
+            self._si5351._write_u8(ph_delay_reg, delay)
+            self._si5351.reset_plls()
 
     def __init__(self, i2c: I2C, *, address: int = _SI5351_ADDRESS) -> None:
         self._address = address
@@ -422,18 +431,21 @@ class SI5351:
             _SI5351_REGISTER_42_MULTISYNTH0_PARAMETERS_1,
             _SI5351_REGISTER_16_CLK0_CONTROL,
             _SI5351_REGISTER_44_MULTISYNTH0_PARAMETERS_3,
+            _SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET,
         )
         self.clock_1 = self._Clock(
             self,
             _SI5351_REGISTER_50_MULTISYNTH1_PARAMETERS_1,
             _SI5351_REGISTER_17_CLK1_CONTROL,
             _SI5351_REGISTER_52_MULTISYNTH1_PARAMETERS_3,
+            _SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET,
         )
         self.clock_2 = self._Clock(
             self,
             _SI5351_REGISTER_58_MULTISYNTH2_PARAMETERS_1,
             _SI5351_REGISTER_18_CLK2_CONTROL,
             _SI5351_REGISTER_60_MULTISYNTH2_PARAMETERS_3,
+            _SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET,
         )
 
     def _read_u8(self, register: int) -> int:
