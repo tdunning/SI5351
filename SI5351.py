@@ -159,17 +159,16 @@ class SI5351:
 
         def _configure_registers(self, p1: int, p2: int, p3: int) -> None:
             # Update PLL registers.
-            with self._si5351._device as i2c:
-                buf = bytearray(8)
-                buf[0] = (p3 & 0x0000FF00) >> 8
-                buf[1] = p3 & 0x000000FF
-                buf[2] = (p1 & 0x00030000) >> 16
-                buf[3] = (p1 & 0x0000FF00) >> 8
-                buf[4] = p1 & 0x000000FF
-                buf[5] = ((p3 & 0x000F0000) >> 12) | ((p2 & 0x000F0000) >> 16)
-                buf[6] = (p2 & 0x0000FF00) >> 8
-                buf[7] = p2 & 0x000000FF
-                i2c.writeto_mem(self._base, buf)
+            buf = bytearray(8)
+            buf[0] = (p3 & 0x0000FF00) >> 8
+            buf[1] = p3 & 0x000000FF
+            buf[2] = (p1 & 0x00030000) >> 16
+            buf[3] = (p1 & 0x0000FF00) >> 8
+            buf[4] = p1 & 0x000000FF
+            buf[5] = ((p3 & 0x000F0000) >> 12) | ((p2 & 0x000F0000) >> 16)
+            buf[6] = (p2 & 0x0000FF00) >> 8
+            buf[7] = p2 & 0x000000FF
+            self._si5351._device.writeto_mem(self._si5351._address, self._base, buf)
             # Reset both PLLs.
             self._si5351._write_u8(_SI5351_REGISTER_177_PLL_RESET, (1 << 7) | (1 << 5))
 
@@ -239,6 +238,7 @@ class SI5351:
             base_address: int,
             control_register: int,
             r_register: int,
+            phase_register: int,
         ) -> None:
             self._si5351 = si5351
             self._base = base_address
@@ -246,6 +246,7 @@ class SI5351:
             self._r = r_register
             self._pll = None
             self._divider = None
+            self._phase = phase_register
 
         @property
         def frequency(self) -> float:
@@ -309,17 +310,16 @@ class SI5351:
 
         def _configure_registers(self, p1: int, p2: int, p3: int) -> None:
             # Update MSx registers.
-            with self._si5351._device as i2c:
-                buf = bytearray(8)
-                buf[0] = (p3 & 0x0000FF00) >> 8
-                buf[1] = p3 & 0x000000FF
-                buf[2] = (p1 & 0x00030000) >> 16
-                buf[3] = (p1 & 0x0000FF00) >> 8
-                buf[4] = p1 & 0x000000FF
-                buf[5] = ((p3 & 0x000F0000) >> 12) | ((p2 & 0x000F0000) >> 16)
-                buf[6] = (p2 & 0x0000FF00) >> 8
-                buf[7] = p2 & 0x000000FF
-                i2c.writeto_mem(self._si5351._address, self._base, buf)
+            buf = bytearray(8)
+            buf[0] = (p3 & 0x0000FF00) >> 8
+            buf[1] = p3 & 0x000000FF
+            buf[2] = (p1 & 0x00030000) >> 16
+            buf[3] = (p1 & 0x0000FF00) >> 8
+            buf[4] = p1 & 0x000000FF
+            buf[5] = ((p3 & 0x000F0000) >> 12) | ((p2 & 0x000F0000) >> 16)
+            buf[6] = (p2 & 0x0000FF00) >> 8
+            buf[7] = p2 & 0x000000FF
+            self._si5351._device.writeto_mem(self._si5351._address, self._base, buf)
 
         def configure_integer(
             self, pll: "PLL", divider: int, inverted: bool = False
@@ -403,6 +403,13 @@ class SI5351:
             self._pll = pll
             self._divider = divider + (numerator / denominator)
 
+        def phase_delay(self, phase: float):
+            assert phase_delay >= 0 and phase_delay <= 1.0, "Invalid phase delay, must be in [0,1]"
+            ph_delay_reg = SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET + self.
+            delay = int(phase * (self._divider))
+            assert delay < 128, "Phase delay too large for selected PLL divisor"
+            self._si5351._write_u8(ph_delay_reg, delay)
+            self._si5351.reset_plls()
 
     def __init__(self, i2c: I2C, *, address: int = _SI5351_ADDRESS) -> None:
         self._address = address
@@ -411,12 +418,10 @@ class SI5351:
         # Disable all outputs setting CLKx_DIS high.
         self._write_u8(_SI5351_REGISTER_3_OUTPUT_ENABLE_CONTROL, 0xFF)
         # Power down all output drivers
-        with self._device as i2c:
-            buf = bytearray(9)
-            buf[0] = 
-            for i in range(8):
-                buf[i] = 0x80
-            i2c.writeto_mem(address, _SI5351_REGISTER_16_CLK0_CONTROL, buf)
+        buf = bytearray(8)
+        for i in range(8):
+            buf[i] = 0x80
+        self._device.writeto_mem(address, _SI5351_REGISTER_16_CLK0_CONTROL, buf)
         # Initialize PLL A and B objects.
         self.pll_a = self._PLL(self, 26, 0)
         self.pll_b = self._PLL(self, 34, (1 << 5))
@@ -426,31 +431,34 @@ class SI5351:
             _SI5351_REGISTER_42_MULTISYNTH0_PARAMETERS_1,
             _SI5351_REGISTER_16_CLK0_CONTROL,
             _SI5351_REGISTER_44_MULTISYNTH0_PARAMETERS_3,
+            _SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET,
         )
         self.clock_1 = self._Clock(
             self,
             _SI5351_REGISTER_50_MULTISYNTH1_PARAMETERS_1,
             _SI5351_REGISTER_17_CLK1_CONTROL,
             _SI5351_REGISTER_52_MULTISYNTH1_PARAMETERS_3,
+            _SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET,
         )
         self.clock_2 = self._Clock(
             self,
             _SI5351_REGISTER_58_MULTISYNTH2_PARAMETERS_1,
             _SI5351_REGISTER_18_CLK2_CONTROL,
             _SI5351_REGISTER_60_MULTISYNTH2_PARAMETERS_3,
+            _SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET,
         )
 
     def _read_u8(self, register: int) -> int:
         "Read an 8-bit unsigned value from the specified 8-bit address."
         buf = bytearray(1)
-        self._device.readfrom_mem_into(self.address, register, buf)
+        self._device.readfrom_mem_into(self._address, register, buf)
         return buf[0]
 
     def _write_u8(self, register: int, value: int) -> None:
         "Write an 8-bit unsigned value to the specified 8-bit register."
         buf = bytearray(1)
         buf[0] = value
-        self._device.writeto_mem(self.address, register, buf)
+        self._device.writeto_mem(self._address, register, buf)
 
     @property
     def outputs_enabled(self) -> bool:
