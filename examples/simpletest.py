@@ -13,15 +13,15 @@
 #  - Clock 1 at 13.553115MHz, using PLL B as a source divided by 45.5
 #  - Clock 2 at 10.76khz, using PLL B as a source divided by 900 and further
 #    divided with an R divider of 64.
-from machine import i2c
-from SI5351 import SI5351
+from machine import I2C
+import SI5351
 
 
 # Set up I2C device for clock generator on pins 2 and 3
 i2c = I2C(1, sda=machine.Pin(2), scl=machine.Pin(3), freq=40000)
 
 # Initialize SI5351. This is the standard address and could have been omitted
-si5351 = SI5351(i2c, 0x60)
+si5351 = SI5351.SI5351(i2c, address=0x60)
 
 # Now configue the PLLs and clock outputs.
 # The PLLs can be configured with a multiplier and division of the on-board
@@ -69,7 +69,7 @@ si5351.clock_2.configure_integer(si5351.pll_b, 900)
 #  - R_DIV_32: divider of 32
 #  - R_DIV_64: divider of 64
 #  - R_DIV_128: divider of 128
-si5351.clock_2.r_divider = adafruit_si5351.R_DIV_64
+si5351.clock_2.r_divider = SI5351.R_DIV_64
 print("Clock 2: {0}kHz".format(si5351.clock_2.frequency / 1000))
 
 # After configuring PLLs and clocks, enable the outputs.
