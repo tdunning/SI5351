@@ -404,11 +404,10 @@ class SI5351:
             self._divider = divider + (numerator / denominator)
 
         def phase_delay(self, phase: float):
-            assert phase_delay >= 0 and phase_delay <= 1.0, "Invalid phase delay, must be in [0,1]"
-            ph_delay_reg = SI5351_REGISTER_165_CLK0_INITIAL_PHASE_OFFSET + self.
+            assert phase >= 0 and phase <= 1.0, "Invalid phase delay, must be in [0,1]"
             delay = int(phase * (self._divider))
             assert delay < 128, "Phase delay too large for selected PLL divisor"
-            self._si5351._write_u8(ph_delay_reg, delay)
+            self._si5351._write_u8(self._phase, delay)
             self._si5351.reset_plls()
 
     def __init__(self, i2c: I2C, *, address: int = _SI5351_ADDRESS) -> None:
